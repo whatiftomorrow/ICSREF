@@ -164,14 +164,14 @@ class Program():
         """
 
         # Matches the prologue
-        prologue = '\x0d\xc0\xa0\xe1\x00\x58\x2d\xe9\x0c\xb0\xa0\xe1'
+        prologue = b'\x0d\xc0\xa0\xe1\x00\x58\x2d\xe9\x0c\xb0\xa0\xe1'
         beginnings = self.__allindices(self.hexdump, prologue)
         # Matches the epilogue
-        epilogue = '\x00\xa8\x1b\xe9'
+        epilogue = b'\x00\xa8\x1b\xe9'
         endings = self.__allindices(self.hexdump, epilogue)
         endings = [i+4 for i in endings]
 
-        return zip(beginnings, endings)
+        return list(zip(beginnings, endings))
 
     def __find_functions(self):
         """
@@ -218,18 +218,18 @@ class Program():
         """
         offset = self.dynlib_end
         # Reverse find 0xFFFF (offset for the beginning of strings)
-        dynlib_offset = self.hexdump.rfind('\xff\xff',0,offset) + 2
+        dynlib_offset = self.hexdump.rfind(b'\xff\xff',0,offset) + 2
         dynlibs = {}
         # Match printable ASCII characters
-        dynlib = re.search('[ -~]*', self.hexdump[dynlib_offset:]).group(0)
+        dynlib = re.search(b'[ -~]*', self.hexdump[dynlib_offset:]).group(0).decode('ascii')
         # Find the offsets to dynamic libs
         while dynlib:
             dynlib_offset += len(dynlib) + 1
-            temp = self.hexdump[dynlib_offset:dynlib_offset+2].encode('hex')
+            temp = self.hexdump[dynlib_offset:dynlib_offset+2].hex()
             jump_offset = int(''.join([m[2:4]+m[0:2] for m in [temp[i:i+4] for i in range(0,len(temp),4)]]),16) * 4 + 8
             dynlibs[jump_offset] = dynlib
             dynlib_offset += 2
-            dynlib = re.search('[ -~]*', self.hexdump[dynlib_offset:]).group(0)
+            dynlib = re.search(b'[ -~]*', self.hexdump[dynlib_offset:]).group(0).decode('ascii')
         return dynlibs
 
     def __find_statlibs(self):
@@ -237,9 +237,9 @@ class Program():
         stop_offset  = self.FunctionBoundaries[-1][1]-8
         funs = [x for x, _ in self.FunctionBoundaries]
         # Change 0x2000 location of writing address in OUTRO with 0x10000000 to not overwrite code
-        code_start = '\x00\x20\x00\x00'
-        with open('temphexdump.bin', 'w') as f:
-            hexdump_mod = self.hexdump.replace(code_start, '\x00\x00\x00\x10')
+        code_start = b'\x00\x20\x00\x00'
+        with open('temphexdump.bin', 'wb') as f:
+            hexdump_mod = self.hexdump.replace(code_start, b'\x00\x00\x00\x10')
             f.write(hexdump_mod)
         proj = angr.Project('temphexdump.bin', load_options={'main_opts': {'backend': 'blob', 'custom_base_addr': 0, 'custom_arch':'ARMEL', 'custom_entry_point':0x50}, 'auto_load_libs':False})
         state = proj.factory.entry_state()
@@ -307,7 +307,7 @@ class Program():
                 raise
         dat_f = os.path.join(path, '{}_init_analysis.dat'.format(self.name))
         
-        with open(dat_f, 'w') as f:
+        with open(dat_f, 'wb') as f:
             dill.dump(self, f)
 
     def __allindices(self, file_bytes, sub, offset=0):
@@ -330,9 +330,9 @@ class Program():
         Finds consecutive <= 4-byte ASCII character strings
         """
         strings = {}
-        p=re.compile('([ -~]{4,})')
+        p=re.compile(b'([ -~]{4,})')
         for m in p.finditer(self.hexdump):
-            strings[m.start()] = m.group()
+            strings[m.start()] = m.group().decode('ascii')
         return strings
 
 class Function():
@@ -379,7 +379,7 @@ class Function():
             if len(op) < 6:
                 op_str += line[43:].split(' ')[0]
         # Function opcodes SHA256 hash
-        self.hash = hashlib.sha256(op_str).hexdigest()
+        self.hash = hashlib.sha256(op_str.encode('ascii')).hexdigest()
         # Initialize list of calls from function. Gets populated later
         self.calls = {}
 
