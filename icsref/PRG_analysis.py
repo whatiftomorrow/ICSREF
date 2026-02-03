@@ -270,7 +270,7 @@ class Program():
                 if 'mov pc, r' in line:
                     i=3
                     # Go backwards until ldr r in line
-                    while not re.search('ldr r[0-9], \[0x', func.disasm[index-i]):
+                    while not re.search(r'ldr r[0-9], \[0x', func.disasm[index-i]):
                         i += 1
                     jump = func.disasm[index-i].split(';')[1].split('=')[1].rstrip()
                     # Format jump address (if hex)

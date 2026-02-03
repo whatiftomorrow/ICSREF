@@ -53,7 +53,7 @@ def pidargs(self, args):
 
     :Example:
     
-        reversing\@icsref:$ pidargs
+        reversing\\@icsref:$ pidargs
     
     """
     try:

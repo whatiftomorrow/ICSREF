@@ -14,7 +14,7 @@ def exp_pid_match(self, args):
 
     :Example:
     
-        reversing\@icsref:$ exp_pid_match
+        reversing\\@icsref:$ exp_pid_match
 
     """
     try:

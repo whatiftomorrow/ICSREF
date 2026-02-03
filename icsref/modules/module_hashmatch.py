@@ -13,7 +13,7 @@ def hashmatch(self, args):
 
     :Example:
     
-        reversing\@icsref:$ hashmatch
+        reversing\\@icsref:$ hashmatch
     
     """
     try:

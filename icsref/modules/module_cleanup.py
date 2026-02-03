@@ -12,7 +12,7 @@ def cleanup(self, args):
 
     :Example:
     
-        reversing\@icsref:$ cleanup
+        reversing\\@icsref:$ cleanup
     
     """
     try:
