@@ -233,6 +233,8 @@ class Program():
         return dynlibs
 
     def __find_statlibs(self):
+        if not self.Functions or not self.FunctionBoundaries:
+            return {}
         entry_offset = self.Functions[-1].start
         stop_offset  = self.FunctionBoundaries[-1][1]-8
         funs = [x for x, _ in self.FunctionBoundaries]
