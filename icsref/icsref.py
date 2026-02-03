@@ -12,7 +12,10 @@ import os
 import dill
 import importlib
 import inspect
-from .PRG_analysis import *
+try:
+    from .PRG_analysis import *
+except ImportError:
+    from PRG_analysis import *
 from timeit import default_timer as timer
 
 class icsrefPrompt(Cmd):
