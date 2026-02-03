@@ -12,7 +12,7 @@ import os
 import dill
 import importlib
 import inspect
-from PRG_analysis import *
+from .PRG_analysis import *
 from timeit import default_timer as timer
 
 class icsrefPrompt(Cmd):
@@ -20,7 +20,7 @@ class icsrefPrompt(Cmd):
     cmd2 prompt class for the interactive console
     """
     def __init__(self):
-        Cmd.__init__(self, use_ipython=True)
+        Cmd.__init__(self)
 
     def do_load(self, filename):
         """
@@ -38,7 +38,7 @@ class icsrefPrompt(Cmd):
         elif filename[-4:] != '.dat':
             print('You must provide a .dat file')
         else:
-            with open(filename, 'r') as f:
+            with open(filename, 'rb') as f:
                 self.prg = dill.load(f)
             print('Loading of {} finished.'.format(self.prg.name))
 
@@ -95,7 +95,7 @@ class icsrefPrompt(Cmd):
         else:
             outfile = filename + '.dat'
         dat_f = os.path.join('results', self.prg.name, outfile)
-        with open(dat_f, 'w') as f:
+        with open(dat_f, 'wb') as f:
             dill.dump(self.prg, f)
         print('Saved {}.'.format(outfile))
         return 0

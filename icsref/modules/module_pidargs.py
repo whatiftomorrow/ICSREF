@@ -95,27 +95,27 @@ def pidargs(self, args):
         # Entry point of GLOBAL_INIT function
         entry_offset = prg.Functions[0].start
         # Change LDMDB epilogue to 0xFFFFFFFF so that the simgr errors and doesn't go to empty state
-        epilogue = '\x00\xa8\x1b\xe9'
+        epilogue = b'\x00\xa8\x1b\xe9'
         # GLOBALINIT start and stop locations to only change code there
         g_start = prg.FunctionBoundaries[0][0]
         g_stop = prg.FunctionBoundaries[0][1]
         # hexdump_mod contains the entire program
-        branch_offset = (PLC_PRG_fun.start - g_stop - 4) / 4 + 0xea000000
+        branch_offset = (PLC_PRG_fun.start - g_stop - 4) // 4 + 0xea000000
         branch_target = struct.pack('<I', branch_offset)
         hexdump_mod = prg.hexdump[:g_stop].replace(epilogue, branch_target) + prg.hexdump[g_stop:]
         # Find the locations of MOV PC, LR and NOP them out (2 before and 2 after instructions)
-        movpclr = '\x0f\xe0\xa0\xe1'
-        nop = '\x00\x00\xa0\xe1'
+        movpclr = b'\x0f\xe0\xa0\xe1'
+        nop = b'\x00\x00\xa0\xe1'
         while movpclr in hexdump_mod:
             offset = hexdump_mod.find(movpclr)
             hexdump_mod = hexdump_mod[:offset - 8] + nop * 5 + hexdump_mod[offset + 12:]
 
-        with open('temphexdump{}.bin'.format(i), 'w') as f:
+        with open('temphexdump{}.bin'.format(i), 'wb') as f:
             # Force angr to enter errored state (2 locations call PID)
             # pidcall1 = 0x2ccc
             PIDcall = PIDoffsets_pc[i]
             # pidcall2 = 0x2db8
-            hexdump_mod = hexdump_mod[:PIDcall] + '\xff\xff\xff\xff' + hexdump_mod[PIDcall + 4:]
+            hexdump_mod = hexdump_mod[:PIDcall] + b'\xff\xff\xff\xff' + hexdump_mod[PIDcall + 4:]
             # Find the locations of MOV PC, LR and NOP them out (2 before and 2 after instructions)
             f.write(hexdump_mod)
 

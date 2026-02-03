@@ -24,22 +24,22 @@ def exp_pid_match(self, args):
         return 0
 
     # Occurrences of 1000.0
-    id1000 = '\x00\x00\x7A\x44'
+    id1000 = b'\x00\x00\x7A\x44'
     oc1000 = prg._Program__allindices(prg.hexdump, id1000)
     # Occurrences of 3.0
-    id3 = '\x00\x00\x40\x40'
+    id3 = b'\x00\x00\x40\x40'
     oc3 = prg._Program__allindices(prg.hexdump, id3)
     # Occurrences of 1E38
-    id1E38 = '\x99\x76\x96\x7E'
+    id1E38 = b'\x99\x76\x96\x7E'
     oc1E38 = prg._Program__allindices(prg.hexdump, id1E38)
     # Occurrences of -1E38
-    idnot1E38 = '\x99\x76\x96\xFE'
+    idnot1E38 = b'\x99\x76\x96\xFE'
     ocnot1E38 = prg._Program__allindices(prg.hexdump, idnot1E38)
     # Occurrences of 1E38
-    id1E30 = '\xCA\xF2\x49\x71'
+    id1E30 = b'\xCA\xF2\x49\x71'
     oc1E30 = prg._Program__allindices(prg.hexdump, id1E30)
     # Occurrences of -1E38
-    idnot1E30 = '\xCA\xF2\x49\xF1'
+    idnot1E30 = b'\xCA\xF2\x49\xF1'
     ocnot1E30 = prg._Program__allindices(prg.hexdump, idnot1E30)
 
     # Check if minimum occurrence of constants exists in hexdump, otherwise return

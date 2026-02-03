@@ -71,9 +71,9 @@ def hashmatch(self, args):
     # Search for matches of BOTH main and init
     for func_index, func in enumerate(prg.Functions[:-2]):
         # Match main functions
-        hash_match_main = filter(lambda signature: signature['hash'] == func.hash, main_sign)
+        hash_match_main = list(filter(lambda signature: signature['hash'] == func.hash, main_sign))
         # Match the previous function as the INIT for matched main
-        hash_match_init = filter(lambda signature: signature['hash'] == prg.Functions[func_index+1].hash, init_sign)
+        hash_match_init = list(filter(lambda signature: signature['hash'] == prg.Functions[func_index+1].hash, init_sign))
         # If both match then BINGO! <pats self on the back>
         if hash_match_main and hash_match_init:
             matched.append(func_index)
@@ -110,7 +110,7 @@ def hashmatch(self, args):
     for func_index in not_matched:
         func = prg.Functions[func_index]
         # Match MAIN functions
-        hash_match_main = filter(lambda signature: signature['hash'] == func.hash, main_sign)
+        hash_match_main = list(filter(lambda signature: signature['hash'] == func.hash, main_sign))
         if hash_match_main:
             matched.append(func_index)
             # Construct new_name
@@ -121,7 +121,7 @@ def hashmatch(self, args):
             print('Hashmatch module (MAY HAVE) found function {} at 0x{:x}'.format(new_name, prg.Functions[func_index].start))
         
         # Match INIT functions
-        hash_match_init = filter(lambda signature: signature['hash'] == func.hash, init_sign)
+        hash_match_init = list(filter(lambda signature: signature['hash'] == func.hash, init_sign))
         if hash_match_init:
             matched.append(func_index)
             new_name = 'maybe_' + hash_match_init[0]['name']
@@ -148,7 +148,7 @@ def __replace_callname(self, args):
         prg.Functions[func_index].lib = lib
     # Replace value in stat libs
     if old in prg.statlibs_dict.values():
-        a = prg.statlibs_dict.keys()[prg.statlibs_dict.values().index(old)]
+        a = list(prg.statlibs_dict.keys())[list(prg.statlibs_dict.values()).index(old)]
         prg.statlibs_dict[a] = new
     # Iterate over Fuctions to fix calls to the new name
     for func in prg.Functions:
