@@ -20,7 +20,7 @@ class icsrefPrompt(Cmd):
     cmd2 prompt class for the interactive console
     """
     def __init__(self):
-        Cmd.__init__(self)
+        super().__init__()
 
     def do_load(self, filename):
         """

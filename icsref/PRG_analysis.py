@@ -241,7 +241,7 @@ class Program():
         with open('temphexdump.bin', 'wb') as f:
             hexdump_mod = self.hexdump.replace(code_start, b'\x00\x00\x00\x10')
             f.write(hexdump_mod)
-        proj = angr.Project('temphexdump.bin', load_options={'main_opts': {'backend': 'blob', 'custom_base_addr': 0, 'custom_arch':'ARMEL', 'custom_entry_point':0x50}, 'auto_load_libs':False})
+        proj = angr.Project('temphexdump.bin', main_opts={'backend': 'blob', 'custom_base_addr': 0, 'custom_arch':'ARMEL', 'custom_entry_point':0x50}, auto_load_libs=False)
         state = proj.factory.entry_state()
         state.regs.pc = entry_offset
         simgr = proj.factory.simulation_manager(state)

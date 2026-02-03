@@ -120,7 +120,7 @@ def pidargs(self, args):
             f.write(hexdump_mod)
 
         # angr project to find arguments to PID calls
-        proj = angr.Project('temphexdump{}.bin'.format(i), load_options={'main_opts': {'backend': 'blob', 'custom_arch':'ARMEL', 'custom_base_addr': 0, 'custom_entry_point':entry_offset}, 'auto_load_libs':False})
+        proj = angr.Project('temphexdump{}.bin'.format(i), main_opts={'backend': 'blob', 'custom_arch':'ARMEL', 'custom_base_addr': 0, 'custom_entry_point':entry_offset}, auto_load_libs=False)
         state = proj.factory.entry_state()
         simgr = proj.factory.simulation_manager(state)
         simgr.run()
