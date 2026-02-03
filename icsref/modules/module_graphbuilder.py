@@ -12,7 +12,7 @@ def graphbuilder(self, args):
 
     :Example:
     
-        reversing\@icsref:$ graphbuilder
+        reversing\\@icsref:$ graphbuilder
     
     """
     self.do_cleanup(None)

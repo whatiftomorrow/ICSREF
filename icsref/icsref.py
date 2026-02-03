@@ -12,7 +12,10 @@ import os
 import dill
 import importlib
 import inspect
-from .PRG_analysis import *
+try:
+    from .PRG_analysis import *
+except ImportError:
+    from PRG_analysis import *
 from timeit import default_timer as timer
 
 class icsrefPrompt(Cmd):
@@ -30,7 +33,7 @@ class icsrefPrompt(Cmd):
 
         :Example:
 
-            reversing\@icsref:$ load results/INTEGRAL/INTEGRAL.dat
+            reversing\\@icsref:$ load results/INTEGRAL/INTEGRAL.dat
 
         """
         if len(filename) == 0 or not os.path.isfile(filename):
@@ -62,7 +65,7 @@ class icsrefPrompt(Cmd):
 
        :Example:
 
-            reversing\@icsref:$ analyze test/INTEGRAL.PRG
+            reversing\\@icsref:$ analyze test/INTEGRAL.PRG
 
         """
         if len(filename) == 0 or not os.path.isfile(filename):
@@ -83,11 +86,11 @@ class icsrefPrompt(Cmd):
 
         :param filename<optional>: filename to save output of analysis
        
-        if no file is provided then filename is analyzed\_<prg.name>.dat
+        if no file is provided then filename is analyzed_<prg.name>.dat
        
         :Example:
 
-            reversing\@icsref:$ save INTEGRAL_new
+            reversing\\@icsref:$ save INTEGRAL_new
 
         """
         if not filename:

@@ -12,7 +12,7 @@ def analytics(self, args):
 
     :Example:
     
-        reversing\@icsref:$ analytics
+        reversing\\@icsref:$ analytics
 
     """
     try:
