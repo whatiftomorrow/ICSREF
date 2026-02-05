@@ -61,12 +61,14 @@ def hashmatch(self, args):
     new = 'PLC_PRG'
     __replace_callname(self, [func_index, new])
 
-    # Disassembly of INIT_1
-    init_1 = '0dc0a0e100582de90cb0a0e104102de50c109fe50021a0e1020091e704109de400a81be9'
-    # Disassembly of PROCESS_ID    
-    process_ID = '0dc0a0e100582de90cb0a0e100009fe500a81be9'
-    # Disassembly of INIT_2
-    init_2 = '0dc0a0e100582de90cb0a0e100a81be9'
+    # x86 opcode patterns for function matching
+    # NOTE: These patterns need to be regenerated from actual x86 CODESYS binaries
+    # x86 INIT_1 pattern: push ebp; mov ebp, esp; ... ; leave; ret
+    init_1 = '5589e5'  # Placeholder - needs x86 CODESYS binary analysis
+    # x86 PROCESS_ID pattern
+    process_ID = '5589e5'  # Placeholder - needs x86 CODESYS binary analysis
+    # x86 INIT_2 pattern
+    init_2 = '5589e5'  # Placeholder - needs x86 CODESYS binary analysis
     
     # Search for matches of BOTH main and init
     for func_index, func in enumerate(prg.Functions[:-2]):

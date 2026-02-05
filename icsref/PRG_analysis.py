@@ -156,20 +156,32 @@ class Program():
     def __find_blocks(self):
         """
         Finds binary blobs (routines) based on the following delimiters:
-         
-        START: 0D C0 A0 E1 00 58 2D E9 0C B0 A0 E1
 
-        STOP:  00 A8 1B E9
+        x86 Function prologue patterns:
+        START: 55 89 E5 (push ebp; mov ebp, esp)
+
+        x86 Function epilogue patterns:
+        STOP:  C9 C3 (leave; ret) or 5D C3 (pop ebp; ret)
 
         """
 
-        # Matches the prologue
-        prologue = b'\x0d\xc0\xa0\xe1\x00\x58\x2d\xe9\x0c\xb0\xa0\xe1'
+        # Matches the x86 prologue: push ebp; mov ebp, esp
+        prologue = b'\x55\x89\xe5'
         beginnings = self.__allindices(self.hexdump, prologue)
-        # Matches the epilogue
-        epilogue = b'\x00\xa8\x1b\xe9'
-        endings = self.__allindices(self.hexdump, epilogue)
-        endings = [i+4 for i in endings]
+
+        # Matches x86 epilogue patterns
+        # Pattern 1: leave; ret (C9 C3)
+        epilogue1 = b'\xc9\xc3'
+        endings1 = self.__allindices(self.hexdump, epilogue1)
+        endings1 = [i+2 for i in endings1]
+
+        # Pattern 2: pop ebp; ret (5D C3)
+        epilogue2 = b'\x5d\xc3'
+        endings2 = self.__allindices(self.hexdump, epilogue2)
+        endings2 = [i+2 for i in endings2]
+
+        # Combine and sort all endings
+        endings = sorted(set(endings1 + endings2))
 
         return list(zip(beginnings, endings))
 
@@ -179,14 +191,14 @@ class Program():
         """
         # Open an r2pipe to radare2 \m/
         r2=r2pipe.open(self.path)
-        # Set r2 architecture configuration - Processor specific
-        r2.cmd('e asm.arch=arm; e asm.bits=32; e cfg.bigendian=false')
+        # Set r2 architecture configuration - Processor specific (x86 32-bit)
+        r2.cmd('e asm.arch=x86; e asm.bits=32; e cfg.bigendian=false')
         # Instantiate Functions
         for i in range(len(self.FunctionBoundaries)):
             # Code disassembly
-            # Start: MOV, STMFD, MOV
+            # Start: push ebp; mov ebp, esp
             start_code = self.FunctionBoundaries[i][0]
-            # Stop: LDMDB
+            # Stop: leave; ret or pop ebp; ret
             stop_code = self.FunctionBoundaries[i][1]
             length_code = stop_code - start_code
             disasm_code = r2.cmd('b {}; pD @{}'.format(length_code ,start_code))
@@ -243,19 +255,19 @@ class Program():
         with open('temphexdump.bin', 'wb') as f:
             hexdump_mod = self.hexdump.replace(code_start, b'\x00\x00\x00\x10')
             f.write(hexdump_mod)
-        proj = angr.Project('temphexdump.bin', main_opts={'backend': 'blob', 'custom_base_addr': 0, 'custom_arch':'ARMEL', 'custom_entry_point':0x50}, auto_load_libs=False)
+        proj = angr.Project('temphexdump.bin', main_opts={'backend': 'blob', 'custom_base_addr': 0, 'custom_arch':'x86', 'custom_entry_point':0x0}, auto_load_libs=False)
         state = proj.factory.entry_state()
-        state.regs.pc = entry_offset
+        state.regs.eip = entry_offset
         simgr = proj.factory.simulation_manager(state)
-        # Initialize some (0xFF) mem locations so taht execution doesn't jump to end.
+        # Initialize some (0xFF) mem locations so that execution doesn't jump to end.
         for i in range(0,0xFF,4):
-            simgr.active[0].mem[simgr.active[0].regs.r0 + i].long = 0xFFFFFFFF
+            simgr.active[0].mem[simgr.active[0].regs.eax + i].long = 0xFFFFFFFF
         # Run the code to create the static offsets in memory
         simgr.explore(find=stop_offset)
         statlibs = {}
         i = 0
         while len(statlibs) < len(funs) - 1:
-            mem_val = state.solver.eval(simgr.found[0].mem[simgr.found[0].regs.r1 + i].int.resolved)
+            mem_val = state.solver.eval(simgr.found[0].mem[simgr.found[0].regs.ebx + i].int.resolved)
             if mem_val in funs:
                 statlibs[i + 8] = 'sub_{:x}'.format(mem_val)
             i += 4
@@ -265,27 +277,34 @@ class Program():
     def __find_libcalls(self):
         """
         Finds the calls from all functions (dynamic and static)
+        x86 version - looks for call and jmp instructions with memory operands
         """
         for func in self.Functions:
             for index, line in enumerate(func.disasm):
-                # Jump register can be other than r8
-                if 'mov pc, r' in line:
-                    i=3
-                    # Go backwards until ldr r in line
-                    while not re.search(r'ldr r[0-9], \[0x', func.disasm[index-i]):
-                        i += 1
-                    jump = func.disasm[index-i].split(';')[1].split('=')[1].rstrip()
-                    # Format jump address (if hex)
-                    if '0x' in jump:
-                        jump = int(jump, 16)
-                    jump = int(jump)
-                    # Annotate disassembly
-                    lib_name = self.libs_dict[jump]
-                    func.disasm[index] += '                  ; call to {}'.format(lib_name)
-                    if lib_name not in func.calls.keys():
-                        func.calls[lib_name] = 1
-                    else:
-                        func.calls[lib_name] += 1
+                # x86 indirect call/jump patterns: call [addr] or jmp [addr]
+                # Also handle call dword ptr [addr] or jmp dword ptr [addr]
+                call_match = re.search(r'(call|jmp)\s+(?:dword\s+ptr\s+)?\[0x([0-9a-fA-F]+)\]', line)
+                if call_match:
+                    jump = int(call_match.group(2), 16)
+                    if jump in self.libs_dict:
+                        # Annotate disassembly
+                        lib_name = self.libs_dict[jump]
+                        func.disasm[index] += '                  ; call to {}'.format(lib_name)
+                        if lib_name not in func.calls.keys():
+                            func.calls[lib_name] = 1
+                        else:
+                            func.calls[lib_name] += 1
+                # Also check for direct call with relocation pattern
+                direct_call_match = re.search(r'call\s+0x([0-9a-fA-F]+)', line)
+                if direct_call_match and not call_match:
+                    jump = int(direct_call_match.group(1), 16)
+                    if jump in self.libs_dict:
+                        lib_name = self.libs_dict[jump]
+                        func.disasm[index] += '                  ; call to {}'.format(lib_name)
+                        if lib_name not in func.calls.keys():
+                            func.calls[lib_name] = 1
+                        else:
+                            func.calls[lib_name] += 1
         return 0
 
     def __read_file(self):

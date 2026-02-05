@@ -77,9 +77,14 @@ def pidargs(self, args):
             PIDoffsets_pc.append(int(re.findall(r'\S+', line)[0], 16))
             PIDoffsets_index.append(index)
 
-    # Find offset in PID_FIXCYCLE FB for SB stack base (R9)
+    # Find offset in PID_FIXCYCLE FB for stack base (ebp in x86)
     a=[x for x in self.prg.Functions if 'PID' in x.name][0]
-    sb_offset = int(re.search(r'\[.+?,.+?\]', a.disasm[3]).group(0).split(', ')[1][:-1], 16) - 0xC
+    # x86 uses [ebp+offset] or [ebp-offset] for local variables
+    sb_match = re.search(r'\[ebp\s*([+-]\s*0x[0-9a-fA-F]+|\s*[+-]\s*[0-9]+)?\]', a.disasm[3])
+    if sb_match and sb_match.group(1):
+        sb_offset = int(sb_match.group(1).replace(' ', ''), 16) if '0x' in sb_match.group(1) else int(sb_match.group(1).replace(' ', ''))
+    else:
+        sb_offset = 0
 
     # If there are calls to PID_FIXCYCLE create list in prg object to hold the results
     if PIDoffsets_pc:
@@ -94,21 +99,27 @@ def pidargs(self, args):
         # Create hexdump_mod - Not very efficient but meh
         # Entry point of GLOBAL_INIT function
         entry_offset = prg.Functions[0].start
-        # Change LDMDB epilogue to 0xFFFFFFFF so that the simgr errors and doesn't go to empty state
-        epilogue = b'\x00\xa8\x1b\xe9'
+        # Change x86 epilogue (leave;ret or pop ebp;ret) to 0xFFFFFFFF so that the simgr errors
+        epilogue1 = b'\xc9\xc3'  # leave; ret
+        epilogue2 = b'\x5d\xc3'  # pop ebp; ret
         # GLOBALINIT start and stop locations to only change code there
         g_start = prg.FunctionBoundaries[0][0]
         g_stop = prg.FunctionBoundaries[0][1]
         # hexdump_mod contains the entire program
-        branch_offset = (PLC_PRG_fun.start - g_stop - 4) // 4 + 0xea000000
-        branch_target = struct.pack('<I', branch_offset)
-        hexdump_mod = prg.hexdump[:g_stop].replace(epilogue, branch_target) + prg.hexdump[g_stop:]
-        # Find the locations of MOV PC, LR and NOP them out (2 before and 2 after instructions)
-        movpclr = b'\x0f\xe0\xa0\xe1'
-        nop = b'\x00\x00\xa0\xe1'
-        while movpclr in hexdump_mod:
-            offset = hexdump_mod.find(movpclr)
-            hexdump_mod = hexdump_mod[:offset - 8] + nop * 5 + hexdump_mod[offset + 12:]
+        # x86 near jump (E9 + 32-bit relative offset)
+        branch_offset = PLC_PRG_fun.start - g_stop - 5  # -5 for the jmp instruction length
+        branch_target = b'\xe9' + struct.pack('<i', branch_offset)  # signed 32-bit
+        # Pad to match epilogue size (2 bytes) with NOPs if needed
+        hexdump_mod = prg.hexdump[:g_stop-2].replace(epilogue1, branch_target[:2]).replace(epilogue2, branch_target[:2]) + branch_target + prg.hexdump[g_stop+3:]
+        hexdump_mod = prg.hexdump[:g_stop].replace(epilogue1, branch_target[:2] + b'\x90').replace(epilogue2, branch_target[:2] + b'\x90')
+        hexdump_mod = prg.hexdump[:g_stop-2] + branch_target + prg.hexdump[g_stop+3:]
+        # Find the locations of RET instructions and NOP them out (with surrounding context)
+        ret_instr = b'\xc3'  # x86 RET
+        nop = b'\x90'  # x86 NOP
+        # Replace standalone RET instructions with NOPs in the modified region
+        for offset in range(g_start, g_stop):
+            if hexdump_mod[offset:offset+1] == ret_instr:
+                hexdump_mod = hexdump_mod[:offset] + nop + hexdump_mod[offset + 1:]
 
         with open('temphexdump{}.bin'.format(i), 'wb') as f:
             # Force angr to enter errored state (2 locations call PID)
@@ -119,8 +130,8 @@ def pidargs(self, args):
             # Find the locations of MOV PC, LR and NOP them out (2 before and 2 after instructions)
             f.write(hexdump_mod)
 
-        # angr project to find arguments to PID calls
-        proj = angr.Project('temphexdump{}.bin'.format(i), main_opts={'backend': 'blob', 'custom_arch':'ARMEL', 'custom_base_addr': 0, 'custom_entry_point':entry_offset}, auto_load_libs=False)
+        # angr project to find arguments to PID calls (x86 32-bit)
+        proj = angr.Project('temphexdump{}.bin'.format(i), main_opts={'backend': 'blob', 'custom_arch':'x86', 'custom_base_addr': 0, 'custom_entry_point':entry_offset}, auto_load_libs=False)
         state = proj.factory.entry_state()
         simgr = proj.factory.simulation_manager(state)
         simgr.run()
@@ -129,8 +140,8 @@ def pidargs(self, args):
         # Remove temp file
         os.remove('temphexdump{}.bin'.format(i))
 
-        # Record stackbase
-        pidinstance.stackbase = s1.solver.eval(s1.regs.r9)
+        # Record stackbase (ebp is frame pointer in x86)
+        pidinstance.stackbase = s1.solver.eval(s1.regs.ebp)
 
         # Save arguments that go in PID_FIXCYCLE call
         '''
@@ -168,58 +179,58 @@ def pidargs(self, args):
         '''
 
         # SET_POINT
-        SET_POINT_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x04].float.resolved)
-        SET_POINT_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x04].int.resolved)
+        SET_POINT_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x04].float.resolved)
+        SET_POINT_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x04].int.resolved)
         pidinstance.SET_POINT_f = SET_POINT_f
         pidinstance.SET_POINT_i = SET_POINT_i
         # KP
-        KP_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x08].float.resolved)
-        KP_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x08].int.resolved)
+        KP_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x08].float.resolved)
+        KP_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x08].int.resolved)
         pidinstance.KP_f = KP_f
         pidinstance.KP_i = KP_i
         # TN
-        TN_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x0C].float.resolved)
-        TN_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x0C].int.resolved)
+        TN_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x0C].float.resolved)
+        TN_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x0C].int.resolved)
         pidinstance.TN_f = TN_f
         pidinstance.TN_i = TN_i
         # TV
-        TV_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x10].float.resolved)
-        TV_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x10].int.resolved)
+        TV_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x10].float.resolved)
+        TV_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x10].int.resolved)
         pidinstance.TV_f = TV_f
         pidinstance.TV_i = TV_i
         # Y_MANUAL
-        Y_MANUAL_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x14].float.resolved)
-        Y_MANUAL_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x14].int.resolved)
+        Y_MANUAL_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x14].float.resolved)
+        Y_MANUAL_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x14].int.resolved)
         pidinstance.Y_MANUAL_f = Y_MANUAL_f
         pidinstance.Y_MANUAL_i = Y_MANUAL_i
         # Y_OFFSET
-        Y_OFFSET_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x18].float.resolved)
-        Y_OFFSET_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x18].int.resolved)
+        Y_OFFSET_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x18].float.resolved)
+        Y_OFFSET_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x18].int.resolved)
         pidinstance.Y_OFFSET_f = Y_OFFSET_f
         pidinstance.Y_OFFSET_i = Y_OFFSET_i
         # Y_MIN
-        Y_MIN_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x1C].float.resolved)
-        Y_MIN_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x1C].int.resolved)
+        Y_MIN_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x1C].float.resolved)
+        Y_MIN_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x1C].int.resolved)
         pidinstance.Y_MIN_f = Y_MIN_f
         pidinstance.Y_MIN_i = Y_MIN_i
         # Y_MAX
-        Y_MAX_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x20].float.resolved)
-        Y_MAX_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x20].int.resolved)
+        Y_MAX_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x20].float.resolved)
+        Y_MAX_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x20].int.resolved)
         pidinstance.Y_MAX_f = Y_MAX_f
         pidinstance.Y_MAX_i = Y_MAX_i
         # MANUAL
-        MANUAL_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x24].float.resolved)
-        MANUAL_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x24].int.resolved)
+        MANUAL_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x24].float.resolved)
+        MANUAL_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x24].int.resolved)
         pidinstance.MANUAL_f = MANUAL_f
         pidinstance.MANUAL_i = MANUAL_i
         # RESET
-        RESET_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x25].float.resolved)
-        RESET_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x25].int.resolved)
+        RESET_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x25].float.resolved)
+        RESET_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x25].int.resolved)
         pidinstance.RESET_f = RESET_f
         pidinstance.RESET_i = RESET_i
         # CYCLE
-        CYCLE_f = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x28].float.resolved)
-        CYCLE_i = s1.solver.eval(s1.mem[s1.regs.r9 + sb_offset + 0x28].int.resolved)
+        CYCLE_f = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x28].float.resolved)
+        CYCLE_i = s1.solver.eval(s1.mem[s1.regs.ebp + sb_offset + 0x28].int.resolved)
         pidinstance.CYCLE_f = CYCLE_f
         pidinstance.CYCLE_i = CYCLE_i
 
